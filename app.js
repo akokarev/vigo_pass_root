@@ -103,3 +103,108 @@ for (const button of document.querySelectorAll('.copy')) {
     }
   });
 }
+
+// --- PWA install / offline update ---
+const appAction = document.querySelector('#appAction');
+const appActionHint = document.querySelector('#appActionHint');
+let deferredInstallPrompt = null;
+const CURRENT_APP_VERSION = '1.1.0';
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function showAppAction(label, handler, hint = '') {
+  appAction.textContent = label;
+  appAction.hidden = false;
+  appAction.onclick = handler;
+  appActionHint.textContent = hint;
+  appActionHint.hidden = !hint;
+}
+
+async function getRegistration() {
+  if (!('serviceWorker' in navigator)) return null;
+  return navigator.serviceWorker.getRegistration('./') || navigator.serviceWorker.getRegistration();
+}
+
+async function updateInstalledApp() {
+  appAction.disabled = true;
+  appAction.textContent = 'Проверка обновлений…';
+  appActionHint.hidden = true;
+
+  try {
+    const response = await fetch('./version.json?update=' + Date.now(), { cache: 'no-store' });
+    if (!response.ok) throw new Error('version check failed');
+    const remote = await response.json();
+
+    if (remote.version === CURRENT_APP_VERSION) {
+      appAction.textContent = 'Обновлений нет';
+      setTimeout(() => { appAction.textContent = 'Обновить'; appAction.disabled = false; }, 1400);
+      return;
+    }
+
+    const registration = await getRegistration();
+    if (registration) {
+      await registration.update();
+      if (registration.waiting) registration.waiting.postMessage('SKIP_WAITING');
+    }
+
+    appAction.textContent = 'Обновление…';
+    // Let the service worker finish activation and reload from the origin.
+    setTimeout(() => window.location.reload(), 500);
+  } catch (e) {
+    appAction.disabled = false;
+    appAction.textContent = 'Обновить';
+    showAppAction('Обновить', updateInstalledApp, 'Не удалось проверить сайт. Проверьте подключение к интернету.');
+  }
+}
+
+function setupInstallUI() {
+  if (isStandalone()) {
+    showAppAction('Обновить', updateInstalledApp);
+    return;
+  }
+
+  if (isIOS()) {
+    showAppAction('Установить приложение', () => { alert('На iPhone/iPad: нажмите «Поделиться» → «На экран Домой». Затем подтвердите добавление. После установки приложение будет открываться отдельным окном и работать offline.'); }, 'На iPhone/iPad установка выполняется через меню «Поделиться» → «На экран Домой».');
+    return;
+  }
+
+  if (deferredInstallPrompt) {
+    showAppAction('Установить приложение', async () => {
+      const prompt = deferredInstallPrompt;
+      deferredInstallPrompt = null;
+      appAction.hidden = true;
+      appActionHint.hidden = true;
+      await prompt.prompt();
+      await prompt.userChoice;
+    });
+    return;
+  }
+
+  // Chrome may decide to expose installation only through its browser UI.
+  appAction.hidden = true;
+  appActionHint.hidden = true;
+}
+
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  setupInstallUI();
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  showAppAction('Обновить', updateInstalledApp);
+});
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.error);
+}
+
+setupInstallUI();

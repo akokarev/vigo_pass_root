@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VIGO / Qualcomm Password Calculator</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#191919">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VIGO Passwords">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -59,6 +66,10 @@
   </div>
 
   <footer>Расчёт выполняется полностью в браузере. PDSN и serial не отправляются на сервер.</footer>
+  <div class="app-actions" id="appActions">
+    <button id="appAction" class="app-action" hidden></button>
+    <p id="appActionHint" class="app-action-hint" hidden></p>
+  </div>
 </main>
 <script src="app.js"></script>
 </body>
