@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VIGO / Qualcomm Password Calculator</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="card">
+  <h1>VIGO / Qualcomm</h1>
+  <p class="muted">Локальный калькулятор паролей</p>
+
+  <label for="pdsn">PDSN</label>
+  <input id="pdsn" autocomplete="off" spellcheck="false" placeholder="Введите PDSN устройства">
+  <p class="hint">PDSN указан в информации об устройстве. Формат и длина могут отличаться — введите значение без изменений.</p>
+
+  <section id="results" class="results" hidden>
+    <div class="result">
+      <b>PASS 1 — Factory</b>
+      <output id="factory"></output>
+      <button class="copy" data-copy="factory">Копировать</button>
+    </div>
+
+    <div class="result secondary">
+      <b>PASS 2 — SU</b>
+      <output id="su"></output>
+      <button class="copy" data-copy="su">Копировать</button>
+      <small>Для расчёта введите значение <code>persist.radio.sn</code> ниже.</small>
+    </div>
+
+    <div class="result">
+      <b>PASS 3 — Master</b>
+      <output id="master">DfCs0715#!</output>
+      <button class="copy" data-copy="master">Копировать</button>
+    </div>
+  </section>
+
+  <section class="radio-help">
+    <label for="radioSn">persist.radio.sn <span>(для PASS 2)</span></label>
+    <input id="radioSn" autocomplete="off" spellcheck="false" placeholder="Вставьте результат команды adb">
+    <div class="help-box">
+      <strong>Как получить значение:</strong>
+      <ol>
+        <li>Подключите ПК к автомобилю USB-кабелем.</li>
+        <li>Убедитесь, что устройство определяется через ADB.</li>
+        <li>Выполните в командной строке:</li>
+      </ol>
+      <code class="command">adb shell getprop persist.radio.sn</code>
+      <p>Скопируйте полученный результат целиком и вставьте его в поле выше. PASS 2 рассчитаетcя автоматически.</p>
+    </div>
+  </section>
+
+  <p id="error" class="error" hidden></p>
+
+  <div class="source">
+    <span>Исходная инструкция:</span>
+    <a href="https://4pda.to/forum/index.php?showtopic=1121992#entry143498501" target="_blank" rel="noopener noreferrer">обсуждение на 4PDA</a>
+  </div>
+
+  <footer>Расчёт выполняется полностью в браузере. PDSN и serial не отправляются на сервер.</footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
