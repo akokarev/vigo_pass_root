@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vigo-password-calculator-v1.1.0';
+const CACHE_NAME = 'vigo-password-calculator-v1.2.0';
 const APP_ASSETS = [
   './',
   './index.html',
@@ -26,8 +26,7 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Network-first: while online, the installed app gets the newest files.
-// When offline, the previously cached version is used.
+// Network-first while online; cached files are used when offline.
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;

@@ -108,10 +108,12 @@ for (const button of document.querySelectorAll('.copy')) {
 const appAction = document.querySelector('#appAction');
 const appActionHint = document.querySelector('#appActionHint');
 let deferredInstallPrompt = null;
-const CURRENT_APP_VERSION = '1.1.0';
+const CURRENT_APP_VERSION = '1.2.0';
 
 function isStandalone() {
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  return window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true ||
+    document.referrer.startsWith('android-app://');
 }
 
 function isIOS() {
@@ -119,12 +121,27 @@ function isIOS() {
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
+function isYandexBrowser() {
+  return /YaBrowser/i.test(navigator.userAgent);
+}
+
+function isAndroid() {
+  return /Android/i.test(navigator.userAgent);
+}
+
 function showAppAction(label, handler, hint = '') {
   appAction.textContent = label;
   appAction.hidden = false;
+  appAction.disabled = false;
   appAction.onclick = handler;
   appActionHint.textContent = hint;
   appActionHint.hidden = !hint;
+}
+
+function hideAppAction() {
+  appAction.hidden = true;
+  appActionHint.hidden = true;
+  appAction.onclick = null;
 }
 
 async function getRegistration() {
@@ -138,13 +155,18 @@ async function updateInstalledApp() {
   appActionHint.hidden = true;
 
   try {
-    const response = await fetch('./version.json?update=' + Date.now(), { cache: 'no-store' });
+    const origin = window.location.origin;
+    const versionUrl = new URL('./version.json?update=' + Date.now(), window.location.href).href;
+    const response = await fetch(versionUrl, { cache: 'no-store' });
     if (!response.ok) throw new Error('version check failed');
     const remote = await response.json();
 
-    if (remote.version === CURRENT_APP_VERSION) {
+    if (String(remote.version) === CURRENT_APP_VERSION) {
       appAction.textContent = 'Обновлений нет';
-      setTimeout(() => { appAction.textContent = 'Обновить'; appAction.disabled = false; }, 1400);
+      setTimeout(() => {
+        appAction.textContent = 'Обновить';
+        appAction.disabled = false;
+      }, 1400);
       return;
     }
 
@@ -155,41 +177,107 @@ async function updateInstalledApp() {
     }
 
     appAction.textContent = 'Обновление…';
-    // Let the service worker finish activation and reload from the origin.
-    setTimeout(() => window.location.reload(), 500);
+    setTimeout(() => window.location.reload(), 700);
   } catch (e) {
-    appAction.disabled = false;
-    appAction.textContent = 'Обновить';
-    showAppAction('Обновить', updateInstalledApp, 'Не удалось проверить сайт. Проверьте подключение к интернету.');
+    console.error(e);
+    showAppAction('Обновить', updateInstalledApp, 'Не удалось проверить обновление. Нужен интернет.');
   }
 }
 
-function setupInstallUI() {
-  if (isStandalone()) {
-    showAppAction('Обновить', updateInstalledApp);
+async function installWithNativePrompt() {
+  if (!deferredInstallPrompt) return false;
+
+  const prompt = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  await prompt.prompt();
+
+  try {
+    await prompt.userChoice;
+  } catch (_) {
+    // Some browsers do not expose userChoice reliably.
+  }
+  return true;
+}
+
+function showInstallHelp() {
+  if (isYandexBrowser() && !isAndroid()) {
+    alert(
+      'Установка в Яндекс Браузере:\n\n' +
+      '1. Нажмите значок установки справа от адресной строки.\n' +
+      '2. Выберите «Установить как приложение».\n' +
+      '3. Выберите «Отдельное окно».\n' +
+      '4. В настройках включите «Добавить ярлык».\n\n' +
+      'После этого VIGO появится как отдельное приложение. '
+      + 'При необходимости ярлык также можно добавить через меню приложения.'
+    );
     return;
   }
 
   if (isIOS()) {
-    showAppAction('Установить приложение', () => { alert('На iPhone/iPad: нажмите «Поделиться» → «На экран Домой». Затем подтвердите добавление. После установки приложение будет открываться отдельным окном и работать offline.'); }, 'На iPhone/iPad установка выполняется через меню «Поделиться» → «На экран Домой».');
+    alert(
+      'На iPhone/iPad:\n\n' +
+      '1. Нажмите «Поделиться».\n' +
+      '2. Выберите «На экран Домой».\n' +
+      '3. Подтвердите добавление.\n\n' +
+      'После установки VIGO будет запускаться отдельным окном и сможет работать offline.'
+    );
+    return;
+  }
+
+  if (isAndroid()) {
+    alert(
+      'Если кнопка установки браузера не появилась автоматически, откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».\n\n' +
+      'Сайт должен быть открыт по HTTPS.'
+    );
+    return;
+  }
+
+  alert(
+    'Откройте меню браузера и выберите «Установить как приложение» / «Установить приложение».\n\n' +
+    'В Яндекс Браузере: значок установки справа от адресной строки → «Установить как приложение» → «Отдельное окно» → «Добавить ярлык».'
+  );
+}
+
+async function installApp() {
+  if (deferredInstallPrompt) {
+    appAction.disabled = true;
+    await installWithNativePrompt();
+    appAction.disabled = false;
+    return;
+  }
+
+  // A page cannot create a Windows desktop shortcut by itself. In Yandex
+  // Browser the installation UI is controlled by the browser, so give the
+  // user the exact one-time steps when beforeinstallprompt is unavailable.
+  showInstallHelp();
+}
+
+function setupInstallUI() {
+  if (isStandalone()) {
+    showAppAction('Обновить', updateInstalledApp, 'Проверить сайт на наличие новой версии.');
     return;
   }
 
   if (deferredInstallPrompt) {
-    showAppAction('Установить приложение', async () => {
-      const prompt = deferredInstallPrompt;
-      deferredInstallPrompt = null;
-      appAction.hidden = true;
-      appActionHint.hidden = true;
-      await prompt.prompt();
-      await prompt.userChoice;
-    });
+    showAppAction('Установить приложение', installApp);
     return;
   }
 
-  // Chrome may decide to expose installation only through its browser UI.
-  appAction.hidden = true;
-  appActionHint.hidden = true;
+  // Keep the button visible even when the browser does not expose the
+  // beforeinstallprompt event (notably desktop Yandex Browser). The button
+  // then opens a concise, browser-specific installation guide.
+  if (isYandexBrowser() || isIOS() || isAndroid()) {
+    showAppAction('Установить приложение', installApp,
+      isYandexBrowser() && !isAndroid()
+        ? 'В Яндекс Браузере используйте значок установки справа от адресной строки.'
+        : 'Если браузер не показал системное окно установки, кнопка даст инструкцию.'
+    );
+    return;
+  }
+
+  showAppAction('Установить приложение', installApp,
+    'Браузер может показать системное окно установки приложения.'
+  );
 }
 
 window.addEventListener('beforeinstallprompt', event => {
@@ -200,11 +288,14 @@ window.addEventListener('beforeinstallprompt', event => {
 
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
-  showAppAction('Обновить', updateInstalledApp);
+  showAppAction('Обновить', updateInstalledApp, 'Проверить сайт на наличие новой версии.');
 });
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.error);
+  navigator.serviceWorker.register('./sw.js', { scope: './' }).then(registration => {
+    // Ask the browser to look for a new worker whenever the installed app is opened.
+    registration.update().catch(() => {});
+  }).catch(console.error);
 }
 
 setupInstallUI();
